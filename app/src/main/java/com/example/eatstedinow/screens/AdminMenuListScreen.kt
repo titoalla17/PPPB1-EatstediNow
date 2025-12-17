@@ -25,6 +25,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 fun AdminMenuListScreen(
     onAddClick: () -> Unit,
     onEditClick: (String) -> Unit,
+    onVoucherClick: () -> Unit, // <--- 1. NEW CALLBACK ADDED
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -61,16 +62,18 @@ fun AdminMenuListScreen(
                 title = { Text("Kelola Stok & Menu") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") } },
                 actions = {
+                    // --- 2. VOUCHER BUTTON ADDED HERE ---
+                    IconButton(onClick = onVoucherClick) {
+                        Icon(Icons.Default.ConfirmationNumber, "Kelola Voucher", tint = OrangePrimary)
+                    }
+
                     // 1. TOMBOL UPLOAD DUMMY (AWAN)
                     IconButton(onClick = {
                         isLoading = true
                         val batch = db.batch()
 
-                        // Hapus data lama dulu (opsional, biar bersih)
-                        // Tapi di sini kita langsung timpa/tambah baru
-
                         dummyFoods.forEach { food ->
-                            val docRef = db.collection("menus").document() // ID Baru Otomatis
+                            val docRef = db.collection("menus").document()
                             val data = hashMapOf(
                                 "name" to food.name,
                                 "description" to food.description,
@@ -78,7 +81,6 @@ fun AdminMenuListScreen(
                                 "imageUrl" to food.imageUrl,
                                 "category" to food.category,
                                 "stock" to food.stock,
-                                // UPDATE PENTING: Masukkan Rating default
                                 "rating" to 0.0,
                                 "ratingCount" to 0
                             )
@@ -88,14 +90,14 @@ fun AdminMenuListScreen(
                         batch.commit()
                             .addOnSuccessListener {
                                 isLoading = false
-                                Toast.makeText(context, "Sukses Upload ${dummyFoods.size} Data Baru!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Sukses Upload Data Baru!", Toast.LENGTH_SHORT).show()
                             }
                             .addOnFailureListener { e ->
                                 isLoading = false
                                 Toast.makeText(context, "Gagal: ${e.message}", Toast.LENGTH_SHORT).show()
                             }
                     }) {
-                        Icon(Icons.Default.CloudUpload, "Upload Dummy", tint = OrangePrimary)
+                        Icon(Icons.Default.CloudUpload, "Upload Dummy", tint = Color.Gray) // Changed tint to Gray to make Voucher pop
                     }
 
                     // 2. TOMBOL HAPUS SEMUA (RESET DATABASE)

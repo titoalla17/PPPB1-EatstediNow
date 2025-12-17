@@ -2,11 +2,15 @@ package com.example.eatstedinow.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,6 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.example.eatstedinow.model.OrderHistory
 import com.example.eatstedinow.model.OrderItem
 import com.example.eatstedinow.ui.theme.OrangePrimary
@@ -77,8 +82,6 @@ fun HistoryScreen(onBack: () -> Unit) {
                 showRatingDialog = false
             },
             onLater = {
-                // Jika user tekan "Tidak Menilai" di history, kita anggap selesai
-                // Agar dot merah hilang.
                 val orderId = selectedOrderToRate!!.id
                 db.collection("orders").document(orderId).update("isRated", true)
                 Toast.makeText(context, "Baik, tidak dinilai.", Toast.LENGTH_SHORT).show()
@@ -117,6 +120,51 @@ fun HistoryScreen(onBack: () -> Unit) {
                     }
                 }
             }
+        }
+    }
+}
+
+// --- FIX: FUNGSI INI DITAMBAHKAN DI SINI AGAR TIDAK UNRESOLVED REFERENCE ---
+
+@Composable
+fun RatingDialog(onRate: (Int) -> Unit, onLater: () -> Unit) {
+    var selectedStars by remember { mutableStateOf(0) }
+    Dialog(onDismissRequest = {}) {
+        Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White), modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Beri Penilaian", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                Text("Bagaimana pesanan Anda?", color = Color.Gray)
+                Spacer(Modifier.height(16.dp))
+                Row {
+                    for (i in 1..5) {
+                        Icon(if (i <= selectedStars) Icons.Filled.Star else Icons.Outlined.Star, "Star", tint = Color(0xFFFFC107), modifier = Modifier.size(40.dp).clickable { selectedStars = i })
+                    }
+                }
+                Spacer(Modifier.height(24.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    TextButton(onClick = onLater) { Text("Tutup", color = Color.Gray) }
+                    Button(onClick = { if (selectedStars > 0) onRate(selectedStars) }, enabled = selectedStars > 0, colors = ButtonDefaults.buttonColors(containerColor = OrangePrimary)) { Text("Kirim") }
+                }
+            }
+        }
+    }
+}
+
+fun updateFoodRating(db: FirebaseFirestore, foodId: String, newRating: Int) {
+    if (foodId.length < 5) return
+    val ref = db.collection("menus").document(foodId)
+    db.runTransaction { transaction ->
+        val snapshot = transaction.get(ref)
+        if (snapshot.exists()) {
+            val currentRating = snapshot.getDouble("rating") ?: 0.0
+            val currentCount = snapshot.getLong("ratingCount") ?: 0L
+
+            val totalScore = (currentRating * currentCount) + newRating
+            val newCount = currentCount + 1
+            val finalRating = totalScore / newCount
+
+            transaction.update(ref, "rating", finalRating)
+            transaction.update(ref, "ratingCount", newCount)
         }
     }
 }
