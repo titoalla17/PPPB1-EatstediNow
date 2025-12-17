@@ -36,22 +36,23 @@ fun OnboardingScreen(
     onLoginClick: () -> Unit,
     onRegisterClick: () -> Unit
 ) {
+    // --- PERUBAHAN DI SINI: Menggunakan R.drawable.logo ---
     val pages = listOf(
         OnboardingPage(
             title = "Pesan Makanan Kantin",
             subtitle = "Lebih Cepat",
             description = "Nikmati kemudahan memesan makan dan minum dari EATSTEDI langsung dari ponselmu.",
-            imageRes = R.drawable.dummy
+            imageRes = R.drawable.logo // Diubah dari dummy ke logo
         ),
         OnboardingPage(
             title = "Pilih Menu Favoritmu",
             description = "Temukan berbagai pilihan makanan dan minuman dari EATSTEDI dengan harga terjangkau.",
-            imageRes = R.drawable.dummy
+            imageRes = R.drawable.logo // Diubah dari dummy ke logo
         ),
         OnboardingPage(
             title = "Mulai Sekarang!",
             description = "Silakan masuk atau buat akun baru untuk melanjutkan pesanan.",
-            imageRes = R.drawable.dummy
+            imageRes = R.drawable.logo // Diubah dari dummy ke logo
         )
     )
 
@@ -63,7 +64,6 @@ fun OnboardingScreen(
             .fillMaxSize()
             .background(OrangePrimary)
     ) {
-        // --- MODIFIKASI DISINI: userScrollEnabled = false ---
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),

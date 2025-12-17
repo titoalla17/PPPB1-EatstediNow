@@ -8,7 +8,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.border
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Notifications
@@ -18,17 +17,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.eatstedinow.model.FoodItem
-import com.example.eatstedinow.model.dummyFoods
 import com.example.eatstedinow.ui.theme.OrangePrimary
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
+import com.example.eatstedinow.viewmodel.MainViewModel
 
 @Composable
 fun HomeScreen(
@@ -36,88 +34,71 @@ fun HomeScreen(
     onCartClick: () -> Unit,
     onProfileClick: () -> Unit,
     onMenuClick: (String) -> Unit,
-    onNotificationClick: () -> Unit = {}
+    onNotificationClick: () -> Unit = {},
+    viewModel: MainViewModel = viewModel()
 ) {
-    val lightOrangeColor = Color(0xFFFFF3E0)
-    val grayTextColor = Color(0xFF9E9E9E)
-    val backgroundColor = Color(0xFFFAFAFA)
-    var isDineIn by remember { mutableStateOf(true) }
+    val homeState by viewModel.homeState.collectAsState()
+    val profileState by viewModel.profileState.collectAsState()
 
-    var menuList by remember { mutableStateOf<List<FoodItem>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-
-    // FETCH DATA
-    LaunchedEffect(Unit) {
-        val db = FirebaseFirestore.getInstance()
-        db.collection("menus").addSnapshotListener { snapshot, e ->
-            if (e != null) { isLoading = false; return@addSnapshotListener }
-            if (snapshot != null) {
-                val items = snapshot.documents.mapNotNull { doc ->
-                    try {
-                        FoodItem(
-                            id = doc.id,
-                            name = doc.getString("name") ?: "",
-                            description = doc.getString("description") ?: "",
-                            price = doc.getLong("price")?.toInt() ?: 0,
-                            imageUrl = doc.getString("imageUrl") ?: "",
-                            rating = doc.getDouble("rating") ?: 0.0,
-                            category = doc.getString("category") ?: "Makanan",
-                            stock = doc.getLong("stock")?.toInt() ?: 0
-                        )
-                    } catch (e: Exception) { null }
-                }
-                menuList = items
-                isLoading = false
-            }
-        }
+    // Logic Populer: Urutkan Rating Tertinggi, ambil 5 teratas
+    val popularList = remember(homeState.menuList) {
+        homeState.menuList.sortedByDescending { it.rating }.take(5)
     }
-
-    val displayList = if (!isLoading && menuList.isEmpty()) dummyFoods else menuList
+    // Logic Promo: Ambil yang punya originalPrice
+    val promoList = remember(homeState.menuList) {
+        homeState.menuList.filter { it.originalPrice != null && it.originalPrice > it.price }
+    }
 
     Scaffold(
         bottomBar = {
             NavigationBar(containerColor = Color.White, tonalElevation = 10.dp) {
-                NavigationBarItem(icon = { Icon(Icons.Default.Home, "Home") }, label = { Text("Home", fontSize = 10.sp) }, selected = true, colors = NavigationBarItemDefaults.colors(selectedIconColor = OrangePrimary, indicatorColor = lightOrangeColor), onClick = {})
+                NavigationBarItem(icon = { Icon(Icons.Default.Home, "Home") }, label = { Text("Home", fontSize = 10.sp) }, selected = true, colors = NavigationBarItemDefaults.colors(selectedIconColor = OrangePrimary, indicatorColor = Color(0xFFFFF3E0)), onClick = {})
                 NavigationBarItem(icon = { Icon(Icons.Default.MenuBook, "Menu") }, label = { Text("Menu", fontSize = 10.sp) }, selected = false, onClick = { onMenuClick("Semua") })
-                NavigationBarItem(icon = { Icon(Icons.Default.ShoppingCart, "Cart") }, label = { Text("Order", fontSize = 10.sp) }, selected = false, onClick = onCartClick)
+                NavigationBarItem(icon = { Icon(Icons.Default.ShoppingCart, "Cart") }, label = { Text("Cart", fontSize = 10.sp) }, selected = false, onClick = onCartClick)
                 NavigationBarItem(icon = { Icon(Icons.Default.Person, "Profile") }, label = { Text("Profile", fontSize = 10.sp) }, selected = false, onClick = onProfileClick)
             }
         }
     ) { paddingValues ->
-        LazyColumn(modifier = Modifier.fillMaxSize().background(backgroundColor).padding(paddingValues).padding(horizontal = 16.dp)) {
-            // HEADER DINAMIS
-            item { Spacer(modifier = Modifier.height(16.dp)); HomeHeader(grayTextColor, onNotificationClick); Spacer(modifier = Modifier.height(24.dp)) }
+        LazyColumn(modifier = Modifier.fillMaxSize().background(Color(0xFFFAFAFA)).padding(paddingValues).padding(horizontal = 16.dp)) {
 
-            item { DineInTakeAwayToggle(isDineIn) { isDineIn = it }; Spacer(modifier = Modifier.height(24.dp)) }
-
+            // Header
             item {
-                Text("Kategori", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 Spacer(modifier = Modifier.height(16.dp))
-                CategorySection(lightOrangeColor, onCategoryClick = { cat -> onMenuClick(cat) }) // LIST KATEGORI SUDAH LENGKAP DI BAWAH
+                HomeHeader(profileState.displayName, profileState.photoUrl, onNotificationClick)
                 Spacer(modifier = Modifier.height(24.dp))
             }
 
-            item { VoucherBanner(lightOrangeColor); Spacer(modifier = Modifier.height(24.dp)) }
-
+            // Kategori
             item {
-                Text("Sedang Populer", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Text("Kategori", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 Spacer(modifier = Modifier.height(16.dp))
-                if (isLoading && menuList.isEmpty()) {
+                CategorySection(onCategoryClick = { cat -> onMenuClick(cat) })
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            // Sedang Populer (Top 5 Rating)
+            item {
+                Text("Sedang Populer \uD83D\uDD25", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Spacer(modifier = Modifier.height(16.dp))
+                if (homeState.isLoading) {
                     Box(Modifier.fillMaxWidth().height(150.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = OrangePrimary) }
+                } else if (popularList.isEmpty()) {
+                    Text("Belum ada data populer.", color = Color.Gray)
                 } else {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        items(displayList) { food -> FoodCardVertical(food = food, onClick = { onFoodClick(food.id) }) }
+                        items(popularList) { food -> FoodCardVertical(food = food, onClick = { onFoodClick(food.id) }) }
                     }
                 }
                 Spacer(modifier = Modifier.height(24.dp))
             }
 
+            // Sedang Promo (Harga Coret)
             item {
-                Text("Sedang Promo", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Text("Lagi Promo Hemat \uD83C\uDFF7", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 Spacer(modifier = Modifier.height(16.dp))
-                if (!isLoading) {
+                if (!homeState.isLoading) {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        items(displayList.reversed()) { food -> FoodCardVertical(food = food, onClick = { onFoodClick(food.id) }) }
+                        items(promoList) { food -> FoodCardVertical(food = food, onClick = { onFoodClick(food.id) }) }
                     }
                 }
                 Spacer(modifier = Modifier.height(80.dp))
@@ -126,188 +107,80 @@ fun HomeScreen(
     }
 }
 
-// --- SUB COMPONENTS ---
-
-@Composable
-fun HomeHeader(grayColor: Color, onNotificationClick: () -> Unit = {}) {
-    // AMBIL USER DINAMIS DI HOME JUGA
-    val user = FirebaseAuth.getInstance().currentUser
-    val name = user?.displayName ?: "User EatsTedi"
-    val photoUrl = user?.photoUrl?.toString() ?: "https://ui-avatars.com/api/?name=$name&background=FF8C00&color=fff"
-
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            AsyncImage(model = photoUrl, contentDescription = null, modifier = Modifier.size(50.dp).clip(CircleShape).border(1.dp, Color.Gray, CircleShape), contentScale = ContentScale.Crop)
-            Spacer(modifier = Modifier.width(12.dp))
-            Column { Text("Selamat datang kembali!", fontSize = 12.sp, color = grayColor); Text(name, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
-        }
-        Box(modifier = Modifier.size(40.dp).border(1.dp, Color.LightGray, CircleShape).clickable { onNotificationClick() }, contentAlignment = Alignment.Center) { Icon(Icons.Outlined.Notifications, null, tint = Color.Black) }
-    }
-}
-
-@Composable
-fun CategorySection(lightOrange: Color, onCategoryClick: (String) -> Unit) {
-    // UPDATE: MENAMBAHKAN SNACK & MEMBUATNYA SCROLLABLE (LazyRow)
-    LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(16.dp), // Jarak antar item
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        item { CategoryItem(Icons.Default.LunchDining, "Makanan", lightOrange, OrangePrimary) { onCategoryClick("Makanan") } }
-        item { CategoryItem(Icons.Default.LocalDrink, "Minuman", Color(0xFFE3F2FD), Color(0xFF1565C0)) { onCategoryClick("Minuman") } }
-        item { CategoryItem(Icons.Default.Cookie, "Snack", Color(0xFFFFF3E0), Color(0xFFEF6C00)) { onCategoryClick("Snack") } } // SNACK ADDED
-        item { CategoryItem(Icons.Default.Icecream, "Es Krim", Color(0xFFFFEBEE), Color(0xFFC62828)) { onCategoryClick("Es Krim") } }
-    }
-}
-
-// ... Sisanya (DineIn, Voucher, FoodCard, CategoryItem) SAMA SEPERTI KODE SEBELUMNYA ...
-// Pastikan CategoryItem tidak dihapus
-@Composable
-fun CategoryItem(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, bgColor: Color, iconColor: Color, onClick: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { onClick() }) {
-        Box(modifier = Modifier.size(65.dp).background(bgColor, RoundedCornerShape(20.dp)), contentAlignment = Alignment.Center) { Icon(icon, null, tint = iconColor, modifier = Modifier.size(32.dp)) }
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(label, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-    }
-}
-
-@Composable
-fun DineInTakeAwayToggle(isDineIn: Boolean, onToggle: (Boolean) -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth().height(50.dp).background(Color(0xFFF5F5F5), RoundedCornerShape(50.dp)).padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(modifier = Modifier.weight(1f).fillMaxHeight().background(if (isDineIn) Color.White else Color.Transparent, RoundedCornerShape(50.dp)).clickable { onToggle(true) }, contentAlignment = Alignment.Center) { Text("Dine In", fontWeight = if (isDineIn) FontWeight.Bold else FontWeight.Normal) }
-        Box(modifier = Modifier.weight(1f).fillMaxHeight().background(if (!isDineIn) Color.White else Color.Transparent, RoundedCornerShape(50.dp)).clickable { onToggle(false) }, contentAlignment = Alignment.Center) { Text("Take Away", fontWeight = if (!isDineIn) FontWeight.Bold else FontWeight.Normal) }
-    }
-}
-
-@Composable
-fun VoucherBanner(lightOrange: Color) {
-    var showDialog by remember { mutableStateOf(false) }
-    var voucherInput by remember { mutableStateOf("") }
-    var voucherMessage by remember { mutableStateOf("") }
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    Column {
-        SnackbarHost(hostState = snackbarHostState)
-
-        Card(
-            colors = CardDefaults.cardColors(containerColor = lightOrange),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Voucher Khusus", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    Text("Dapatkan diskon!", fontSize = 11.sp, color = Color.Gray)
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // ✅ BUTTON HANYA MEMBUKA DIALOG
-                    Button(
-                        onClick = { showDialog = true }
-                    ) {
-                        Text("Pakai Voucher")
-                    }
-                }
-
-                Icon(
-                    Icons.Default.ConfirmationNumber,
-                    contentDescription = null,
-                    tint = OrangePrimary,
-                    modifier = Modifier
-                        .size(60.dp)
-                        .graphicsLayer(rotationZ = -15f)
-                )
-            }
-        }
-    }
-
-    // ================= DIALOG INPUT VOUCHER =================
-    if (showDialog) {
-        AlertDialog(
-            onDismissRequest = {
-                showDialog = false
-                voucherInput = ""
-            },
-            title = { Text("Masukkan Kode Voucher") },
-            text = {
-                OutlinedTextField(
-                    value = voucherInput,
-                    onValueChange = { voucherInput = it },
-                    label = { Text("Kode Voucher") },
-                    singleLine = true
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val code = voucherInput.trim().uppercase()
-                        val user = FirebaseAuth.getInstance().currentUser
-
-                        if (code.isEmpty()) {
-                            voucherMessage = "Kode voucher tidak boleh kosong"
-                        } else if (code != "PROMODTEDI") {
-                            voucherMessage = "Kode voucher tidak valid"
-                        } else if (user == null) {
-                            voucherMessage = "User belum login"
-                        } else {
-                            val db = FirebaseFirestore.getInstance()
-                            val userRef = db.collection("users").document(user.uid)
-
-                            userRef.get().addOnSuccessListener { doc ->
-                                val redeemed =
-                                    (doc.get("redeemedVouchers") as? List<String>)?.toMutableList()
-                                        ?: mutableListOf()
-
-                                if (redeemed.contains(code)) {
-                                    voucherMessage = "Voucher sudah pernah digunakan"
-                                } else {
-                                    redeemed.add(code)
-                                    userRef.set(
-                                        mapOf("redeemedVouchers" to redeemed),
-                                        com.google.firebase.firestore.SetOptions.merge()
-                                    )
-                                    voucherMessage = "Voucher berhasil digunakan 🎉"
-                                }
-                            }
-                        }
-
-                        showDialog = false
-                        voucherInput = ""
-                    }
-                ) {
-                    Text("OK")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        showDialog = false
-                        voucherInput = ""
-                    }
-                ) {
-                    Text("Batal")
-                }
-            }
-        )
-    }
-}
-
-
+// --- KOMPONEN FOOD CARD DENGAN HARGA CORET ---
 @Composable
 fun FoodCardVertical(food: FoodItem, onClick: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(2.dp), shape = RoundedCornerShape(16.dp), modifier = Modifier.width(160.dp).clickable { onClick() }) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(2.dp),
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.width(160.dp).clickable { onClick() }
+    ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Box(contentAlignment = Alignment.TopEnd) {
                 AsyncImage(model = food.imageUrl, contentDescription = null, modifier = Modifier.size(136.dp).clip(CircleShape).align(Alignment.Center), contentScale = ContentScale.Crop)
-                Box(modifier = Modifier.align(Alignment.BottomStart).background(Color.Black.copy(0.6f), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 2.dp)) {
-                    Text("Stok: ${food.stock}", color = Color.White, fontSize = 10.sp)
+
+                // Badge Promo
+                if (food.originalPrice != null && food.originalPrice > food.price) {
+                    Box(modifier = Modifier.align(Alignment.TopStart).background(Color.Red, RoundedCornerShape(8.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                        Text("PROMO", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+                // Rating
+                Box(modifier = Modifier.align(Alignment.BottomStart).background(Color.Black.copy(0.6f), RoundedCornerShape(12.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Star, null, tint = Color.Yellow, modifier = Modifier.size(10.dp))
+                        Spacer(Modifier.width(2.dp))
+                        Text("${food.rating}", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
             Spacer(modifier = Modifier.height(12.dp))
-            Text(food.name, fontWeight = FontWeight.Bold, maxLines = 1)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Rp${food.price}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4CAF50))
+            Text(food.name, fontWeight = FontWeight.Bold, maxLines = 1, fontSize = 14.sp)
+
+            // Logic Harga Coret
+            if (food.originalPrice != null && food.originalPrice > food.price) {
+                Text(
+                    text = "Rp ${food.originalPrice}",
+                    fontSize = 10.sp,
+                    color = Color.Gray,
+                    textDecoration = TextDecoration.LineThrough
+                )
+            }
+            Text("Rp ${food.price}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = OrangePrimary)
+        }
+    }
+}
+
+@Composable
+fun HomeHeader(name: String, photoUrl: String, onNotificationClick: () -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AsyncImage(model = photoUrl, contentDescription = null, modifier = Modifier.size(50.dp).clip(CircleShape).background(Color.LightGray), contentScale = ContentScale.Crop)
+            Spacer(modifier = Modifier.width(12.dp))
+            Column { Text("Selamat datang!", fontSize = 12.sp, color = Color.Gray); Text(name, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+        }
+        IconButton(onClick = onNotificationClick) { Icon(Icons.Outlined.Notifications, null) }
+    }
+}
+
+@Composable
+fun CategorySection(onCategoryClick: (String) -> Unit) {
+    val cats = listOf(
+        Triple("Semua", Icons.Default.Fastfood, Color(0xFFE8F5E9)),
+        Triple("Makanan", Icons.Default.LunchDining, Color(0xFFFFF3E0)),
+        Triple("Minuman", Icons.Default.LocalDrink, Color(0xFFE3F2FD)),
+        Triple("Snack", Icons.Default.Cookie, Color(0xFFFCE4EC))
+    )
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        cats.forEach { (name, icon, bg) ->
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { onCategoryClick(name) }) {
+                Box(Modifier.size(60.dp).background(bg, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
+                    Icon(icon, null, tint = Color.Black)
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(name, fontSize = 12.sp)
+            }
         }
     }
 }

@@ -8,7 +8,7 @@ data class OrderHistory(
     val items: List<OrderItem> = emptyList(),
     val total: Int = 0,
     val date: Timestamp = Timestamp.now(),
-    val isRated: Boolean = false // Penanda untuk Dot Merah
+    val isRated: Boolean = false
 )
 
 data class OrderItem(

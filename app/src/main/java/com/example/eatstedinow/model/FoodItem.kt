@@ -5,9 +5,10 @@ data class FoodItem(
     val name: String,
     val description: String,
     val price: Int,
+    val originalPrice: Int? = null,
     val imageUrl: String,
     val rating: Double,
-    val ratingCount: Int = 0, // Field Baru: Jumlah Penilai
+    val ratingCount: Int = 0,
     val category: String = "Makanan",
     val stock: Int = 10
 )

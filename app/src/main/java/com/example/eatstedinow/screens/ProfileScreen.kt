@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,10 +20,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.eatstedinow.ui.theme.OrangePrimary
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
+import com.example.eatstedinow.viewmodel.MainViewModel
 
 @Composable
 fun ProfileScreen(
@@ -33,44 +32,12 @@ fun ProfileScreen(
     onMenuClick: () -> Unit,
     onCartClick: () -> Unit,
     onAdminClick: () -> Unit,
-    onHistoryClick: () -> Unit // Callback History
+    onHistoryClick: () -> Unit,
+    viewModel: MainViewModel = viewModel() // Inject ViewModel
 ) {
-    val user = FirebaseAuth.getInstance().currentUser
-    val userName = user?.displayName ?: "Pengguna"
-    val photoUrl = user?.photoUrl?.toString() ?: "https://ui-avatars.com/api/?name=${userName}&background=FF8C00&color=fff"
-
-
-    // STATE NOTIFIKASI
-    var pendingRatingCount by remember { mutableStateOf(0) }
-    LaunchedEffect(user) {
-        user?.uid?.let { uid ->
-            FirebaseFirestore.getInstance().collection("orders")
-                .whereEqualTo("userId", uid).whereEqualTo("isRated", false)
-                .addSnapshotListener { s, _ -> pendingRatingCount = s?.size() ?: 0 }
-        }
-    }
-
-    // STATE EDIT PROFILE
+    val profileState by viewModel.profileState.collectAsState()
     var showEditDialog by remember { mutableStateOf(false) }
-    var editName by remember { mutableStateOf(userName) }
-    var editEmail by remember { mutableStateOf(user?.email ?: "") }
-    var editMessage by remember { mutableStateOf("") }
-
-    // STATE VOUCHER
     var showVoucherDialog by remember { mutableStateOf(false) }
-    var redeemedVouchers by remember { mutableStateOf<List<String>>(emptyList()) }
-    LaunchedEffect(Unit) {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return@LaunchedEffect
-
-        FirebaseFirestore.getInstance()
-            .collection("users")
-            .document(uid)
-            .addSnapshotListener { doc, _ ->
-                redeemedVouchers =
-                    doc?.get("redeemedVouchers") as? List<String> ?: emptyList()
-            }
-    }
-
 
     Scaffold(
         bottomBar = {
@@ -82,7 +49,7 @@ fun ProfileScreen(
                     icon = {
                         Box {
                             Icon(Icons.Default.Person, "Profile")
-                            if(pendingRatingCount > 0) Box(Modifier.size(8.dp).background(Color.Red, CircleShape).align(Alignment.TopEnd))
+                            if(profileState.pendingRatingCount > 0) Box(Modifier.size(8.dp).background(Color.Red, CircleShape).align(Alignment.TopEnd))
                         }
                     },
                     label = { Text("Profile", fontSize = 10.sp) },
@@ -97,16 +64,17 @@ fun ProfileScreen(
             Spacer(Modifier.height(32.dp))
             Text("My Profile", fontSize = 24.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(32.dp))
+
             Box(Modifier.size(120.dp).border(3.dp, OrangePrimary, CircleShape).padding(4.dp)) {
-                AsyncImage(model = photoUrl, contentDescription = null, modifier = Modifier.fillMaxSize().clip(CircleShape), contentScale = ContentScale.Crop)
+                AsyncImage(model = profileState.photoUrl, contentDescription = null, modifier = Modifier.fillMaxSize().clip(CircleShape), contentScale = ContentScale.Crop)
             }
             Spacer(Modifier.height(16.dp))
-            Text(userName, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(profileState.displayName, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(40.dp))
 
             SectionTitle("Account")
             ProfileMenuItem("Informasi Pribadi", onClick = { showEditDialog = true })
-            ProfileMenuItem("Riwayat Pembelian", onClick = onHistoryClick, hasNotification = pendingRatingCount > 0)
+            ProfileMenuItem("Riwayat Pembelian", onClick = onHistoryClick, hasNotification = profileState.pendingRatingCount > 0)
             ProfileMenuItem("Voucher Saya", onClick = { showVoucherDialog = true })
 
             Spacer(Modifier.height(24.dp))
@@ -124,94 +92,71 @@ fun ProfileScreen(
                 onDismissRequest = { showVoucherDialog = false },
                 title = { Text("Voucher Saya") },
                 text = {
-                    if (redeemedVouchers.isEmpty()) {
-                        Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Spacer(Modifier.height(16.dp))
-                            Text("Anda belum memiliki voucher yang di-redeem", textAlign = androidx.compose.ui.text.style.TextAlign.Center, color = Color.Gray)
-                            Spacer(Modifier.height(16.dp))
-                        }
+                    if (profileState.redeemedVouchers.isEmpty()) {
+                        Text("Anda belum memiliki voucher.", color = Color.Gray, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     } else {
-                        Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).height(300.dp)) {
-                            redeemedVouchers.forEach { voucher ->
+                        Column(modifier = Modifier.fillMaxWidth().height(300.dp).verticalScroll(rememberScrollState())) {
+                            profileState.redeemedVouchers.forEach { voucher ->
                                 VoucherCard(voucher)
                                 Spacer(Modifier.height(8.dp))
                             }
                         }
                     }
                 },
-                confirmButton = {
-                    TextButton(onClick = { showVoucherDialog = false }) {
-                        Text("Tutup")
-                    }
-                }
+                confirmButton = { TextButton(onClick = { showVoucherDialog = false }) { Text("Tutup") } }
             )
         }
 
         if (showEditDialog) {
-            AlertDialog(
-                onDismissRequest = { showEditDialog = false },
-                title = { Text("Edit Informasi Pengguna") },
-                text = {
-                    Column {
-                        OutlinedTextField(
-                            value = editName,
-                            onValueChange = { editName = it },
-                            label = { Text("Nama") },
-                            singleLine = true
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = editEmail,
-                            onValueChange = { editEmail = it },
-                            label = { Text("Email") },
-                            singleLine = true
-                        )
-                        if (editMessage.isNotEmpty()) {
-                            Spacer(Modifier.height(8.dp))
-                            Text(editMessage, color = Color(0xFF388E3C), fontSize = 12.sp)
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        val currentUser = FirebaseAuth.getInstance().currentUser
-                        if (currentUser != null) {
-                            val profileUpdates = com.google.firebase.auth.UserProfileChangeRequest.Builder()
-                                .setDisplayName(editName)
-                                .build()
-                            currentUser.updateProfile(profileUpdates)
-                                .addOnCompleteListener { task ->
-                                    if (task.isSuccessful) {
-                                        if (editEmail != currentUser.email) {
-                                            currentUser.verifyBeforeUpdateEmail(editEmail)
-                                                .addOnCompleteListener { emailTask ->
-                                                    if (emailTask.isSuccessful) {
-                                                        editMessage = "Profil berhasil diperbarui! Cek email untuk verifikasi."
-                                                    } else {
-                                                        editMessage = "Gagal mengubah email."
-                                                    }
-                                                }
-                                        } else {
-                                            editMessage = "Profil berhasil diperbarui!"
-                                        }
-                                    } else {
-                                        editMessage = "Gagal memperbarui profil."
-                                    }
-                                }
-                        }
-                        showEditDialog = false
-                    }) {
-                        Text("Simpan")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showEditDialog = false }) {
-                        Text("Batal")
-                    }
-                }
+            EditProfileDialog(
+                currentName = profileState.displayName,
+                currentEmail = profileState.email,
+                onDismiss = { showEditDialog = false },
+                viewModel = viewModel
             )
         }
     }
+}
+
+@Composable
+fun EditProfileDialog(currentName: String, currentEmail: String, onDismiss: () -> Unit, viewModel: MainViewModel) {
+    var editName by remember { mutableStateOf(currentName) }
+    var editEmail by remember { mutableStateOf(currentEmail) }
+    var editMessage by remember { mutableStateOf("") }
+    var isSaving by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Informasi Pengguna") },
+        text = {
+            Column {
+                OutlinedTextField(value = editName, onValueChange = { editName = it }, label = { Text("Nama") }, singleLine = true)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = editEmail, onValueChange = { editEmail = it }, label = { Text("Email") }, singleLine = true)
+                if (editMessage.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(editMessage, color = if(editMessage.contains("Gagal")) Color.Red else Color(0xFF388E3C), fontSize = 12.sp)
+                }
+                if (isSaving) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !isSaving,
+                onClick = {
+                    isSaving = true
+                    viewModel.updateProfile(editName, editEmail) { success, msg ->
+                        isSaving = false
+                        editMessage = msg
+                        if (success && !msg.contains("verifikasi")) {
+                            // Optional: Delay close or user closes manually
+                        }
+                    }
+                }
+            ) { Text("Simpan") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } }
+    )
 }
 
 @Composable
@@ -232,18 +177,8 @@ fun ProfileMenuItem(text: String, onClick: () -> Unit, hasNotification: Boolean 
 
 @Composable
 fun VoucherCard(voucherCode: String) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Column {
                 Text("Kode Voucher", fontSize = 12.sp, color = Color.Gray)
                 Spacer(Modifier.height(4.dp))
