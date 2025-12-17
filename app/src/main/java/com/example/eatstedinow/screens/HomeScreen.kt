@@ -35,7 +35,8 @@ fun HomeScreen(
     onFoodClick: (String) -> Unit,
     onCartClick: () -> Unit,
     onProfileClick: () -> Unit,
-    onMenuClick: (String) -> Unit
+    onMenuClick: (String) -> Unit,
+    onNotificationClick: () -> Unit = {}
 ) {
     val lightOrangeColor = Color(0xFFFFF3E0)
     val grayTextColor = Color(0xFF9E9E9E)
@@ -85,7 +86,7 @@ fun HomeScreen(
     ) { paddingValues ->
         LazyColumn(modifier = Modifier.fillMaxSize().background(backgroundColor).padding(paddingValues).padding(horizontal = 16.dp)) {
             // HEADER DINAMIS
-            item { Spacer(modifier = Modifier.height(16.dp)); HomeHeader(grayTextColor); Spacer(modifier = Modifier.height(24.dp)) }
+            item { Spacer(modifier = Modifier.height(16.dp)); HomeHeader(grayTextColor, onNotificationClick); Spacer(modifier = Modifier.height(24.dp)) }
 
             item { DineInTakeAwayToggle(isDineIn) { isDineIn = it }; Spacer(modifier = Modifier.height(24.dp)) }
 
@@ -128,7 +129,7 @@ fun HomeScreen(
 // --- SUB COMPONENTS ---
 
 @Composable
-fun HomeHeader(grayColor: Color) {
+fun HomeHeader(grayColor: Color, onNotificationClick: () -> Unit = {}) {
     // AMBIL USER DINAMIS DI HOME JUGA
     val user = FirebaseAuth.getInstance().currentUser
     val name = user?.displayName ?: "User EatsTedi"
@@ -140,7 +141,7 @@ fun HomeHeader(grayColor: Color) {
             Spacer(modifier = Modifier.width(12.dp))
             Column { Text("Selamat datang kembali!", fontSize = 12.sp, color = grayColor); Text(name, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
         }
-        Box(modifier = Modifier.size(40.dp).border(1.dp, Color.LightGray, CircleShape), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.Notifications, null, tint = Color.Black) }
+        Box(modifier = Modifier.size(40.dp).border(1.dp, Color.LightGray, CircleShape).clickable { onNotificationClick() }, contentAlignment = Alignment.Center) { Icon(Icons.Outlined.Notifications, null, tint = Color.Black) }
     }
 }
 
@@ -151,7 +152,6 @@ fun CategorySection(lightOrange: Color, onCategoryClick: (String) -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(16.dp), // Jarak antar item
         modifier = Modifier.fillMaxWidth()
     ) {
-        item { CategoryItem(Icons.Default.Percent, "Promo", Color(0xFFE8F5E9), Color(0xFF2E7D32)) { /* Promo */ } }
         item { CategoryItem(Icons.Default.LunchDining, "Makanan", lightOrange, OrangePrimary) { onCategoryClick("Makanan") } }
         item { CategoryItem(Icons.Default.LocalDrink, "Minuman", Color(0xFFE3F2FD), Color(0xFF1565C0)) { onCategoryClick("Minuman") } }
         item { CategoryItem(Icons.Default.Cookie, "Snack", Color(0xFFFFF3E0), Color(0xFFEF6C00)) { onCategoryClick("Snack") } } // SNACK ADDED
@@ -180,13 +180,119 @@ fun DineInTakeAwayToggle(isDineIn: Boolean, onToggle: (Boolean) -> Unit) {
 
 @Composable
 fun VoucherBanner(lightOrange: Color) {
-    Card(colors = CardDefaults.cardColors(containerColor = lightOrange), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) { Text("Voucher Khusus", fontWeight = FontWeight.Bold, fontSize = 14.sp); Text("Dapatkan diskon!", fontSize = 11.sp, color = Color.Gray); Spacer(modifier = Modifier.height(8.dp)); Button(onClick = {}, colors = ButtonDefaults.buttonColors(containerColor = OrangePrimary), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp), modifier = Modifier.height(32.dp)) { Text("Pakai", fontSize = 12.sp) } }
-            Icon(Icons.Default.ConfirmationNumber, null, tint = OrangePrimary, modifier = Modifier.size(60.dp).graphicsLayer(rotationZ = -15f))
+    var showDialog by remember { mutableStateOf(false) }
+    var voucherInput by remember { mutableStateOf("") }
+    var voucherMessage by remember { mutableStateOf("") }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    Column {
+        SnackbarHost(hostState = snackbarHostState)
+
+        Card(
+            colors = CardDefaults.cardColors(containerColor = lightOrange),
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Voucher Khusus", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text("Dapatkan diskon!", fontSize = 11.sp, color = Color.Gray)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // ✅ BUTTON HANYA MEMBUKA DIALOG
+                    Button(
+                        onClick = { showDialog = true }
+                    ) {
+                        Text("Pakai Voucher")
+                    }
+                }
+
+                Icon(
+                    Icons.Default.ConfirmationNumber,
+                    contentDescription = null,
+                    tint = OrangePrimary,
+                    modifier = Modifier
+                        .size(60.dp)
+                        .graphicsLayer(rotationZ = -15f)
+                )
+            }
         }
     }
+
+    // ================= DIALOG INPUT VOUCHER =================
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showDialog = false
+                voucherInput = ""
+            },
+            title = { Text("Masukkan Kode Voucher") },
+            text = {
+                OutlinedTextField(
+                    value = voucherInput,
+                    onValueChange = { voucherInput = it },
+                    label = { Text("Kode Voucher") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val code = voucherInput.trim().uppercase()
+                        val user = FirebaseAuth.getInstance().currentUser
+
+                        if (code.isEmpty()) {
+                            voucherMessage = "Kode voucher tidak boleh kosong"
+                        } else if (code != "PROMODTEDI") {
+                            voucherMessage = "Kode voucher tidak valid"
+                        } else if (user == null) {
+                            voucherMessage = "User belum login"
+                        } else {
+                            val db = FirebaseFirestore.getInstance()
+                            val userRef = db.collection("users").document(user.uid)
+
+                            userRef.get().addOnSuccessListener { doc ->
+                                val redeemed =
+                                    (doc.get("redeemedVouchers") as? List<String>)?.toMutableList()
+                                        ?: mutableListOf()
+
+                                if (redeemed.contains(code)) {
+                                    voucherMessage = "Voucher sudah pernah digunakan"
+                                } else {
+                                    redeemed.add(code)
+                                    userRef.set(
+                                        mapOf("redeemedVouchers" to redeemed),
+                                        com.google.firebase.firestore.SetOptions.merge()
+                                    )
+                                    voucherMessage = "Voucher berhasil digunakan 🎉"
+                                }
+                            }
+                        }
+
+                        showDialog = false
+                        voucherInput = ""
+                    }
+                ) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showDialog = false
+                        voucherInput = ""
+                    }
+                ) {
+                    Text("Batal")
+                }
+            }
+        )
+    }
 }
+
 
 @Composable
 fun FoodCardVertical(food: FoodItem, onClick: () -> Unit) {
