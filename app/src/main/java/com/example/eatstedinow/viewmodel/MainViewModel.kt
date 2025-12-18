@@ -60,7 +60,7 @@ class MainViewModel : ViewModel() {
                             name = doc.getString("name") ?: "",
                             description = doc.getString("description") ?: "",
                             price = doc.getLong("price")?.toInt() ?: 0,
-                            originalPrice = doc.getLong("originalPrice")?.toInt(), // Fix: Ambil harga coret
+                            originalPrice = doc.getLong("originalPrice")?.toInt(),
                             imageUrl = doc.getString("imageUrl") ?: "",
                             rating = doc.getDouble("rating") ?: 0.0,
                             category = doc.getString("category") ?: "Makanan",
@@ -101,34 +101,25 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    // --- FUNGSI INI WAJIB ADA AGAR PROFILE SCREEN TIDAK ERROR ---
     fun updateProfile(newName: String, newEmail: String, onResult: (Boolean, String) -> Unit) {
         val user = auth.currentUser ?: return
 
-        // 1. Update Display Name
         if (newName != user.displayName) {
-            val updates = UserProfileChangeRequest.Builder()
-                .setDisplayName(newName)
-                .build()
-
+            val updates = UserProfileChangeRequest.Builder().setDisplayName(newName).build()
             user.updateProfile(updates).addOnCompleteListener { task ->
-                if (task.isSuccessful) {
-                    updateLocalProfileState(user) // Update UI immediately
-                }
+                if (task.isSuccessful) updateLocalProfileState(user)
             }
         }
 
-        // 2. Update Email (Jika berubah)
         if (newEmail != user.email && newEmail.isNotEmpty()) {
             user.verifyBeforeUpdateEmail(newEmail).addOnCompleteListener { task ->
                 if (task.isSuccessful) {
-                    onResult(true, "Link verifikasi dikirim ke $newEmail. Silakan cek email.")
+                    onResult(true, "Link verifikasi dikirim ke $newEmail")
                 } else {
                     onResult(false, task.exception?.message ?: "Gagal update email")
                 }
             }
         } else {
-            // Jika hanya ganti nama atau tidak ada perubahan email
             onResult(true, "Profil berhasil diperbarui")
         }
     }

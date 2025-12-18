@@ -37,7 +37,6 @@ fun HistoryScreen(onBack: () -> Unit) {
     var isLoading by remember { mutableStateOf(true) }
     val context = LocalContext.current
 
-    // State Rating Susulan
     var showRatingDialog by remember { mutableStateOf(false) }
     var selectedOrderToRate by remember { mutableStateOf<OrderHistory?>(null) }
 
@@ -91,9 +90,7 @@ fun HistoryScreen(onBack: () -> Unit) {
     }
 
     Scaffold(
-        topBar = {
-            TopAppBar(title = { Text("Riwayat Pembelian") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") } })
-        }
+        topBar = { TopAppBar(title = { Text("Riwayat Pembelian") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") } }) }
     ) { p ->
         if (isLoading) Box(Modifier.fillMaxSize().padding(p), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = OrangePrimary) }
         else if (orderList.isEmpty()) Box(Modifier.fillMaxSize().padding(p), contentAlignment = Alignment.Center) { Text("Belum ada riwayat") }
@@ -124,8 +121,7 @@ fun HistoryScreen(onBack: () -> Unit) {
     }
 }
 
-// --- FIX: FUNGSI INI DITAMBAHKAN DI SINI AGAR TIDAK UNRESOLVED REFERENCE ---
-
+// --- FUNGSI HELPER AGAR TIDAK ERROR ---
 @Composable
 fun RatingDialog(onRate: (Int) -> Unit, onLater: () -> Unit) {
     var selectedStars by remember { mutableStateOf(0) }
@@ -135,11 +131,7 @@ fun RatingDialog(onRate: (Int) -> Unit, onLater: () -> Unit) {
                 Text("Beri Penilaian", fontWeight = FontWeight.Bold, fontSize = 20.sp)
                 Text("Bagaimana pesanan Anda?", color = Color.Gray)
                 Spacer(Modifier.height(16.dp))
-                Row {
-                    for (i in 1..5) {
-                        Icon(if (i <= selectedStars) Icons.Filled.Star else Icons.Outlined.Star, "Star", tint = Color(0xFFFFC107), modifier = Modifier.size(40.dp).clickable { selectedStars = i })
-                    }
-                }
+                Row { for (i in 1..5) Icon(if (i <= selectedStars) Icons.Filled.Star else Icons.Outlined.Star, "Star", tint = Color(0xFFFFC107), modifier = Modifier.size(40.dp).clickable { selectedStars = i }) }
                 Spacer(Modifier.height(24.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     TextButton(onClick = onLater) { Text("Tutup", color = Color.Gray) }
@@ -158,11 +150,9 @@ fun updateFoodRating(db: FirebaseFirestore, foodId: String, newRating: Int) {
         if (snapshot.exists()) {
             val currentRating = snapshot.getDouble("rating") ?: 0.0
             val currentCount = snapshot.getLong("ratingCount") ?: 0L
-
             val totalScore = (currentRating * currentCount) + newRating
             val newCount = currentCount + 1
             val finalRating = totalScore / newCount
-
             transaction.update(ref, "rating", finalRating)
             transaction.update(ref, "ratingCount", newCount)
         }

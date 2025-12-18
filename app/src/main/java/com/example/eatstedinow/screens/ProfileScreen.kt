@@ -33,7 +33,7 @@ fun ProfileScreen(
     onCartClick: () -> Unit,
     onAdminClick: () -> Unit,
     onHistoryClick: () -> Unit,
-    viewModel: MainViewModel = viewModel() // Inject ViewModel
+    viewModel: MainViewModel = viewModel()
 ) {
     val profileState by viewModel.profileState.collectAsState()
     var showEditDialog by remember { mutableStateOf(false) }

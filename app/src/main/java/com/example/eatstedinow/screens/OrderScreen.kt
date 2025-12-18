@@ -25,10 +25,9 @@ import com.example.eatstedinow.CartState
 import com.example.eatstedinow.model.Voucher
 import com.example.eatstedinow.ui.theme.OrangePrimary
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-// --- FIX: IMPORT INI WAJIB ADA ---
-import com.google.firebase.firestore.FirebaseFirestoreException
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,7 +43,6 @@ fun OrderScreen(
     val auth = FirebaseAuth.getInstance()
     val userId = auth.currentUser?.uid
 
-    // State Input Voucher
     var voucherInput by remember { mutableStateOf("") }
     var voucherLoading by remember { mutableStateOf(false) }
 
@@ -71,36 +69,22 @@ fun OrderScreen(
         } else {
             LazyColumn(modifier = Modifier.fillMaxSize().padding(paddingValues).padding(horizontal = 16.dp)) {
 
-                // --- INFO MEJA (HANYA MUNCUL JIKA DINE IN) ---
+                // INFO MEJA
                 if (CartState.isDineIn) {
                     item {
                         Spacer(modifier = Modifier.height(16.dp))
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD)), modifier = Modifier.fillMaxWidth()) {
+                            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.TableRestaurant, null, tint = Color.Blue)
                                 Spacer(modifier = Modifier.width(12.dp))
-                                Column {
-                                    Text("Makan di Tempat", fontWeight = FontWeight.Bold)
-                                    Text("Nomor: ${CartState.tableNumber}", fontSize = 14.sp)
-                                }
-                                Spacer(modifier = Modifier.weight(1f))
-                                TextButton(onClick = { /* Logic Ganti Meja */ }) { Text("Ganti") }
+                                Column { Text("Makan di Tempat", fontWeight = FontWeight.Bold); Text("Nomor: ${CartState.tableNumber}", fontSize = 14.sp) }
                             }
                         }
                     }
                 } else {
                     item {
                         Spacer(modifier = Modifier.height(16.dp))
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)), modifier = Modifier.fillMaxWidth()) {
                             Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.ShoppingBag, null, tint = OrangePrimary)
                                 Spacer(modifier = Modifier.width(12.dp))
@@ -111,15 +95,9 @@ fun OrderScreen(
                 }
 
                 item { Spacer(modifier = Modifier.height(16.dp)) }
-                items(CartState.items) { item ->
-                    CartItemCard(
-                        item = item,
-                        onAdd = { CartState.addQuantity(item) },
-                        onRemove = { CartState.removeItem(item) }
-                    )
-                }
+                items(CartState.items) { item -> CartItemCard(item = item, onAdd = { CartState.addQuantity(item) }, onRemove = { CartState.removeItem(item) }) }
 
-                // Voucher Section
+                // VOUCHER
                 item {
                     Spacer(modifier = Modifier.height(24.dp))
                     Text("Punya Voucher?", fontWeight = FontWeight.Bold)
@@ -127,74 +105,34 @@ fun OrderScreen(
 
                     if (CartState.appliedVoucher == null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedTextField(
-                                value = voucherInput,
-                                onValueChange = { voucherInput = it.uppercase() },
-                                placeholder = { Text("Masukkan kode") },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true,
-                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = OrangePrimary)
-                            )
+                            OutlinedTextField(value = voucherInput, onValueChange = { voucherInput = it.uppercase() }, placeholder = { Text("Masukkan kode") }, modifier = Modifier.weight(1f), singleLine = true, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = OrangePrimary))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Button(
-                                onClick = {
-                                    if (voucherInput.isEmpty()) return@Button
-                                    voucherLoading = true
-                                    db.collection("vouchers")
-                                        .whereEqualTo("code", voucherInput.trim())
-                                        .get()
-                                        .addOnSuccessListener { snapshot ->
-                                            voucherLoading = false
-                                            if (!snapshot.isEmpty) {
-                                                val doc = snapshot.documents.first()
-                                                val v = Voucher(
-                                                    id = doc.id,
-                                                    code = doc.getString("code") ?: "",
-                                                    discount = doc.getLong("discount")?.toInt() ?: 0,
-                                                    minPurchase = doc.getLong("minPurchase")?.toInt() ?: 0,
-                                                    quota = doc.getLong("quota")?.toInt() ?: 0
-                                                )
-                                                if (v.quota <= 0) {
-                                                    Toast.makeText(context, "Kuota voucher habis!", Toast.LENGTH_SHORT).show()
-                                                } else if (CartState.subtotal < v.minPurchase) {
-                                                    Toast.makeText(context, "Min. belanja Rp${v.minPurchase}", Toast.LENGTH_SHORT).show()
-                                                } else {
-                                                    CartState.appliedVoucher = v
-                                                    Toast.makeText(context, "Voucher dipasang!", Toast.LENGTH_SHORT).show()
-                                                    voucherInput = ""
-                                                }
-                                            } else {
-                                                Toast.makeText(context, "Kode tidak ditemukan", Toast.LENGTH_SHORT).show()
-                                            }
-                                        }
-                                        .addOnFailureListener {
-                                            voucherLoading = false
-                                            Toast.makeText(context, "Gagal cek voucher", Toast.LENGTH_SHORT).show()
-                                        }
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = OrangePrimary),
-                                shape = RoundedCornerShape(8.dp),
-                                enabled = !voucherLoading
-                            ) {
-                                if (voucherLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp)) else Text("Pakai")
-                            }
+                            Button(onClick = {
+                                if (voucherInput.isEmpty()) return@Button
+                                voucherLoading = true
+                                db.collection("vouchers").whereEqualTo("code", voucherInput.trim()).get().addOnSuccessListener { snapshot ->
+                                    voucherLoading = false
+                                    if (!snapshot.isEmpty) {
+                                        val doc = snapshot.documents.first()
+                                        val v = Voucher(id = doc.id, code = doc.getString("code") ?: "", discount = doc.getLong("discount")?.toInt() ?: 0, minPurchase = doc.getLong("minPurchase")?.toInt() ?: 0, quota = doc.getLong("quota")?.toInt() ?: 0)
+                                        if (v.quota <= 0) Toast.makeText(context, "Kuota habis!", Toast.LENGTH_SHORT).show()
+                                        else if (CartState.subtotal < v.minPurchase) Toast.makeText(context, "Min. belanja Rp${v.minPurchase}", Toast.LENGTH_SHORT).show()
+                                        else { CartState.appliedVoucher = v; Toast.makeText(context, "Voucher dipasang!", Toast.LENGTH_SHORT).show(); voucherInput = "" }
+                                    } else Toast.makeText(context, "Kode salah", Toast.LENGTH_SHORT).show()
+                                }.addOnFailureListener { voucherLoading = false; Toast.makeText(context, "Error cek voucher", Toast.LENGTH_SHORT).show() }
+                            }, colors = ButtonDefaults.buttonColors(containerColor = OrangePrimary), shape = RoundedCornerShape(8.dp), enabled = !voucherLoading) { if (voucherLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp)) else Text("Pakai") }
                         }
                     } else {
                         Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF4CAF50)), modifier = Modifier.fillMaxWidth()) {
                             Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                                Column {
-                                    Text(CartState.appliedVoucher!!.code, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
-                                    Text("Hemat Rp${CartState.discountAmount}", fontSize = 12.sp, color = Color(0xFF2E7D32))
-                                }
-                                IconButton(onClick = { CartState.appliedVoucher = null }) {
-                                    Icon(Icons.Default.Close, "Hapus", tint = Color.Red)
-                                }
+                                Column { Text(CartState.appliedVoucher!!.code, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32)); Text("Hemat Rp${CartState.discountAmount}", fontSize = 12.sp, color = Color(0xFF2E7D32)) }
+                                IconButton(onClick = { CartState.appliedVoucher = null }) { Icon(Icons.Default.Close, "Hapus", tint = Color.Red) }
                             }
                         }
                     }
                 }
 
-                // Summary & Pay
+                // SUMMARY & TRANSAKSI (LOGIKA FIX: READ -> WRITE)
                 item {
                     Spacer(modifier = Modifier.height(24.dp))
                     PaymentSummarySection()
@@ -211,33 +149,46 @@ fun OrderScreen(
                             val voucher = CartState.appliedVoucher
 
                             db.runTransaction { transaction ->
-                                // Kurangi Stok
+                                // --- FASE 1: BACA SEMUA DATA DULU ---
+                                val stockUpdates = mutableListOf<Pair<DocumentReference, Long>>()
+                                val voucherUpdates = mutableListOf<Pair<DocumentReference, Long>>()
+
+                                // 1. Baca Stok Makanan
                                 CartState.items.forEach { cartItem ->
                                     if (cartItem.food.id.length > 5) {
                                         val foodRef = db.collection("menus").document(cartItem.food.id)
                                         val snapshot = transaction.get(foodRef)
-                                        val currentStock = snapshot.getLong("stock") ?: 0
-                                        if (currentStock >= cartItem.quantity) {
-                                            transaction.update(foodRef, "stock", currentStock - cartItem.quantity)
-                                        } else {
-                                            // FIX: Gunakan class Exception langsung
-                                            throw FirebaseFirestoreException("Stok ${cartItem.food.name} habis!", FirebaseFirestoreException.Code.ABORTED)
+                                        if (snapshot.exists()) {
+                                            val currentStock = snapshot.getLong("stock") ?: 0
+                                            if (currentStock >= cartItem.quantity) {
+                                                stockUpdates.add(foodRef to (currentStock - cartItem.quantity))
+                                            } else {
+                                                // PAKE EXCEPTION BIASA BIAR GA MERAH
+                                                throw Exception("Stok ${cartItem.food.name} habis!")
+                                            }
                                         }
                                     }
                                 }
-                                // Kurangi Voucher
+
+                                // 2. Baca Voucher
                                 if (voucher != null) {
                                     val voucherRef = db.collection("vouchers").document(voucher.id)
                                     val vSnap = transaction.get(voucherRef)
-                                    val currentQuota = vSnap.getLong("quota") ?: 0
-                                    if (currentQuota > 0) {
-                                        transaction.update(voucherRef, "quota", currentQuota - 1)
-                                    } else {
-                                        // FIX: Gunakan class Exception langsung
-                                        throw FirebaseFirestoreException("Voucher habis!", FirebaseFirestoreException.Code.ABORTED)
+                                    if (vSnap.exists()) {
+                                        val currentQuota = vSnap.getLong("quota") ?: 0
+                                        if (currentQuota > 0) {
+                                            voucherUpdates.add(voucherRef to (currentQuota - 1))
+                                        } else {
+                                            // PAKE EXCEPTION BIASA
+                                            throw Exception("Voucher habis!")
+                                        }
                                     }
                                 }
-                                // Simpan Order
+
+                                // --- FASE 2: TULIS DATA ---
+                                stockUpdates.forEach { (ref, newStock) -> transaction.update(ref, "stock", newStock) }
+                                voucherUpdates.forEach { (ref, newQuota) -> transaction.update(ref, "quota", newQuota) }
+
                                 val orderData = hashMapOf(
                                     "userId" to userId,
                                     "total" to CartState.total,
@@ -247,16 +198,11 @@ fun OrderScreen(
                                     "date" to FieldValue.serverTimestamp(),
                                     "isRated" to false,
                                     "items" to CartState.items.map {
-                                        mapOf(
-                                            "foodId" to it.food.id,
-                                            "name" to it.food.name,
-                                            "price" to it.food.price,
-                                            "quantity" to it.quantity,
-                                            "imageUrl" to it.food.imageUrl
-                                        )
+                                        mapOf("foodId" to it.food.id, "name" to it.food.name, "price" to it.food.price, "quantity" to it.quantity, "imageUrl" to it.food.imageUrl)
                                     }
                                 )
                                 transaction.set(orderRef, orderData)
+
                             }.addOnSuccessListener {
                                 Toast.makeText(context, "Order Berhasil!", Toast.LENGTH_LONG).show()
                                 CartState.clear()
@@ -268,9 +214,7 @@ fun OrderScreen(
                         modifier = Modifier.fillMaxWidth().height(54.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = OrangePrimary),
                         shape = RoundedCornerShape(25.dp)
-                    ) {
-                        Text("Bayar & Proses", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    }
+                    ) { Text("Bayar & Proses", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
                     Spacer(modifier = Modifier.height(24.dp))
                 }
             }
@@ -304,17 +248,11 @@ fun PaymentSummarySection() {
         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) { Text("Subtotal", color = Color.Gray); Text("RP ${CartState.subtotal}", color = Color.Gray) }
         if (CartState.discountAmount > 0) {
             Spacer(modifier = Modifier.height(8.dp))
-            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-                Text("Diskon Voucher", color = Color(0xFF2E7D32));
-                Text("- RP ${CartState.discountAmount}", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
-            }
+            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) { Text("Diskon Voucher", color = Color(0xFF2E7D32)); Text("- RP ${CartState.discountAmount}", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold) }
         }
         Spacer(modifier = Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) { Text("Biaya Layanan", color = Color.Gray); Text("RP ${CartState.tax}", color = Color.Gray) }
         Divider(modifier = Modifier.padding(vertical = 12.dp), color = Color.LightGray)
-        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-            Text("Total", fontWeight = FontWeight.Bold, fontSize = 18.sp);
-            Text("RP ${CartState.total}", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = OrangePrimary)
-        }
+        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) { Text("Total", fontWeight = FontWeight.Bold, fontSize = 18.sp); Text("RP ${CartState.total}", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = OrangePrimary) }
     }
 }
